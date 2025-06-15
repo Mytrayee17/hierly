@@ -1,0 +1,2 @@
+candidate_name,email,experience_years,position,tech_stack,assessment_date,technical_questions_total,technical_ai_generated,technical_positive_sentiment,project_questions_total,project_questions_completed,project_ai_generated,project_positive_sentiment,overall_authenticity_rate,overall_completion_rate
+John Doe,john.doe@example.com,3-5,Software Engineer,"Python, React, Node.js",2025-06-14T09:10:27.546378,1,0,1,1,1,0,1,100.0,100.0

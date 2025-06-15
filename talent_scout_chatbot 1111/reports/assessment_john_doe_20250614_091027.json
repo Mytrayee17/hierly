@@ -1,0 +1,61 @@
+{
+  "report_metadata": {
+    "generated_at": "2025-06-14T09:10:27.545709",
+    "report_type": "candidate_assessment",
+    "version": "1.0"
+  },
+  "candidate_information": {
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "experience": "3-5",
+    "position": "Software Engineer",
+    "tech_stack": "Python, React, Node.js"
+  },
+  "technical_interview": {
+    "total_questions": 1,
+    "results": [
+      {
+        "question": "What is the difference between synchronous and asynchronous programming?",
+        "answer": "Synchronous programming executes code sequentially...",
+        "ai_detection": "Human Written",
+        "sentiment": "Positive"
+      }
+    ],
+    "summary": {
+      "total_questions": 1,
+      "ai_generated_responses": 0,
+      "positive_sentiment_responses": 1,
+      "authenticity_rate": 100.0,
+      "positive_sentiment_rate": 100.0
+    }
+  },
+  "project_interview": {
+    "total_questions": 1,
+    "results": [
+      {
+        "question": "Tell me about a recent project.",
+        "answer": "I built an e-commerce platform...",
+        "ai_detection": "Human Written",
+        "sentiment": "Positive"
+      }
+    ],
+    "summary": {
+      "total_questions": 1,
+      "completed_questions": 1,
+      "ai_generated_responses": 0,
+      "positive_sentiment_responses": 1,
+      "completion_rate": 100.0,
+      "authenticity_rate": 100.0,
+      "positive_sentiment_rate": 100.0
+    }
+  },
+  "ai_assessment": "The candidate demonstrates strong technical skills...",
+  "feedback": {},
+  "overall_metrics": {
+    "total_questions_across_interviews": 2,
+    "total_ai_generated_responses": 0,
+    "total_positive_responses": 2,
+    "overall_authenticity_rate": 100.0,
+    "overall_positive_rate": 100.0
+  }
+}

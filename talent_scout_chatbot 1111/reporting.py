@@ -1,0 +1,345 @@
+import json
+import pandas as pd
+from datetime import datetime
+import os
+
+class ReportGenerator:
+    def __init__(self):
+        self.reports_dir = "reports"
+        if not os.path.exists(self.reports_dir):
+            os.makedirs(self.reports_dir)
+    
+    def generate_json_report(self, candidate_info, technical_results, project_results, assessment_text, feedback_data=None):
+        """Generate a comprehensive JSON report"""
+        report_data = {
+            'report_metadata': {
+                'generated_at': datetime.now().isoformat(),
+                'report_type': 'candidate_assessment',
+                'version': '1.0'
+            },
+            'candidate_information': candidate_info,
+            'technical_interview': {
+                'total_questions': len(technical_results),
+                'results': technical_results,
+                'summary': self._analyze_technical_results(technical_results)
+            },
+            'project_interview': {
+                'total_questions': len(project_results),
+                'results': project_results,
+                'summary': self._analyze_project_results(project_results)
+            },
+            'ai_assessment': assessment_text,
+            'feedback': feedback_data if feedback_data else {},
+            'overall_metrics': self._calculate_overall_metrics(technical_results, project_results)
+        }
+        
+        # Save to file
+        candidate_name = candidate_info.get('name', 'unknown').replace(' ', '_').lower()
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{self.reports_dir}/assessment_{candidate_name}_{timestamp}.json"
+        
+        with open(filename, 'w') as f:
+            json.dump(report_data, f, indent=2)
+        
+        return filename, report_data
+    
+    def generate_markdown_report(self, candidate_info, technical_results, project_results, assessment_text, feedback_data=None):
+        """Generate a comprehensive Markdown report"""
+        candidate_name = candidate_info.get('name', 'Unknown Candidate')
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        markdown_content = f"""# Candidate Assessment Report
+
+## Candidate Information
+- **Name:** {candidate_info.get('name', 'N/A')}
+- **Email:** {candidate_info.get('email', 'N/A')}
+- **Phone:** {candidate_info.get('phone', 'N/A')}
+- **Location:** {candidate_info.get('location', 'N/A')}
+- **Experience:** {candidate_info.get('experience', 'N/A')} years
+- **Desired Position:** {candidate_info.get('position', 'N/A')}
+- **Tech Stack:** {candidate_info.get('tech_stack', 'N/A')}
+- **Assessment Date:** {timestamp}
+
+## Technical Interview Results
+
+### Summary
+- **Total Questions:** {len(technical_results)}
+- **AI-Generated Responses:** {sum(1 for r in technical_results if 'AI Generated' in r.get('ai_detection', ''))}
+- **Positive Sentiment Responses:** {sum(1 for r in technical_results if 'Positive' in r.get('sentiment', ''))}
+- **Authenticity Rate:** {((len(technical_results) - sum(1 for r in technical_results if 'AI Generated' in r.get('ai_detection', ''))) / len(technical_results) * 100):.1f}%
+
+### Detailed Results
+"""
+        
+        for i, result in enumerate(technical_results, 1):
+            markdown_content += f"""
+#### Question {i}
+- **Question:** {result.get('question', 'N/A')}
+- **Answer:** {result.get('answer', 'N/A')[:200]}{'...' if len(result.get('answer', '')) > 200 else ''}
+- **AI Detection:** {result.get('ai_detection', 'N/A')}
+- **Sentiment:** {result.get('sentiment', 'N/A')}
+"""
+        
+        markdown_content += f"""
+## Project Interview Results
+
+### Summary
+- **Total Questions:** {len(project_results)}
+- **Questions Completed:** {sum(1 for r in project_results if r.get('answer', '').strip().lower() != 'skipped')}
+- **AI-Generated Responses:** {sum(1 for r in project_results if 'AI Generated' in r.get('ai_detection', ''))}
+- **Positive Sentiment Responses:** {sum(1 for r in project_results if 'Positive' in r.get('sentiment', ''))}
+
+### Detailed Results
+"""
+        
+        for i, result in enumerate(project_results, 1):
+            markdown_content += f"""
+#### Question {i}
+- **Question:** {result.get('question', 'N/A')}
+- **Answer:** {result.get('answer', 'N/A')[:200]}{'...' if len(result.get('answer', '')) > 200 else ''}
+- **AI Detection:** {result.get('ai_detection', 'N/A')}
+- **Sentiment:** {result.get('sentiment', 'N/A')}
+"""
+        
+        markdown_content += f"""
+## AI-Generated Assessment
+
+{assessment_text}
+
+## Overall Metrics
+
+{self._format_metrics_markdown(technical_results, project_results)}
+"""
+        
+        if feedback_data:
+            markdown_content += f"""
+## Candidate Feedback
+
+- **Overall Rating:** {feedback_data.get('rating', 'N/A')}
+- **Comments:** {feedback_data.get('feedback', 'N/A')}
+- **Suggestions:** {feedback_data.get('suggestions', 'N/A')}
+"""
+        
+        markdown_content += f"""
+---
+*Report generated by TalentScout AI Hiring Assistant on {timestamp}*
+"""
+        
+        # Save to file
+        candidate_name_clean = candidate_info.get('name', 'unknown').replace(' ', '_').lower()
+        timestamp_clean = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{self.reports_dir}/assessment_{candidate_name_clean}_{timestamp_clean}.md"
+        
+        with open(filename, 'w') as f:
+            f.write(markdown_content)
+        
+        return filename, markdown_content
+    
+    def generate_csv_summary(self, candidate_info, technical_results, project_results):
+        """Generate a CSV summary for data analysis"""
+        summary_data = {
+            'candidate_name': candidate_info.get('name', 'N/A'),
+            'email': candidate_info.get('email', 'N/A'),
+            'experience_years': candidate_info.get('experience', 'N/A'),
+            'position': candidate_info.get('position', 'N/A'),
+            'tech_stack': candidate_info.get('tech_stack', 'N/A'),
+            'assessment_date': datetime.now().isoformat(),
+            'technical_questions_total': len(technical_results),
+            'technical_ai_generated': sum(1 for r in technical_results if 'AI Generated' in r.get('ai_detection', '')),
+            'technical_positive_sentiment': sum(1 for r in technical_results if 'Positive' in r.get('sentiment', '')),
+            'project_questions_total': len(project_results),
+            'project_questions_completed': sum(1 for r in project_results if r.get('answer', '').strip().lower() != 'skipped'),
+            'project_ai_generated': sum(1 for r in project_results if 'AI Generated' in r.get('ai_detection', '')),
+            'project_positive_sentiment': sum(1 for r in project_results if 'Positive' in r.get('sentiment', '')),
+            'overall_authenticity_rate': self._calculate_authenticity_rate(technical_results, project_results),
+            'overall_completion_rate': self._calculate_completion_rate(technical_results, project_results)
+        }
+        
+        # Save to CSV
+        df = pd.DataFrame([summary_data])
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{self.reports_dir}/summary_{timestamp}.csv"
+        df.to_csv(filename, index=False)
+        
+        return filename, summary_data
+    
+    def _analyze_technical_results(self, technical_results):
+        """Analyze technical interview results"""
+        if not technical_results:
+            return "No technical interview data available."
+        
+        total = len(technical_results)
+        ai_count = sum(1 for r in technical_results if 'AI Generated' in r.get('ai_detection', ''))
+        positive_count = sum(1 for r in technical_results if 'Positive' in r.get('sentiment', ''))
+        
+        return {
+            'total_questions': total,
+            'ai_generated_responses': ai_count,
+            'positive_sentiment_responses': positive_count,
+            'authenticity_rate': ((total - ai_count) / total * 100) if total > 0 else 0,
+            'positive_sentiment_rate': (positive_count / total * 100) if total > 0 else 0
+        }
+    
+    def _analyze_project_results(self, project_results):
+        """Analyze project interview results"""
+        if not project_results:
+            return "No project interview data available."
+        
+        total = len(project_results)
+        completed = sum(1 for r in project_results if r.get('answer', '').strip().lower() != 'skipped')
+        ai_count = sum(1 for r in project_results if 'AI Generated' in r.get('ai_detection', ''))
+        positive_count = sum(1 for r in project_results if 'Positive' in r.get('sentiment', ''))
+        
+        return {
+            'total_questions': total,
+            'completed_questions': completed,
+            'ai_generated_responses': ai_count,
+            'positive_sentiment_responses': positive_count,
+            'completion_rate': (completed / total * 100) if total > 0 else 0,
+            'authenticity_rate': ((completed - ai_count) / completed * 100) if completed > 0 else 0,
+            'positive_sentiment_rate': (positive_count / completed * 100) if completed > 0 else 0
+        }
+    
+    def _calculate_overall_metrics(self, technical_results, project_results):
+        """Calculate overall performance metrics"""
+        tech_summary = self._analyze_technical_results(technical_results)
+        project_summary = self._analyze_project_results(project_results)
+        
+        total_questions = tech_summary['total_questions'] + project_summary['total_questions']
+        total_ai = tech_summary['ai_generated_responses'] + project_summary['ai_generated_responses']
+        total_positive = tech_summary['positive_sentiment_responses'] + project_summary['positive_sentiment_responses']
+        
+        return {
+            'total_questions_across_interviews': total_questions,
+            'total_ai_generated_responses': total_ai,
+            'total_positive_responses': total_positive,
+            'overall_authenticity_rate': ((total_questions - total_ai) / total_questions * 100) if total_questions > 0 else 0,
+            'overall_positive_rate': (total_positive / total_questions * 100) if total_questions > 0 else 0
+        }
+    
+    def _calculate_authenticity_rate(self, technical_results, project_results):
+        """Calculate overall authenticity rate"""
+        all_results = technical_results + project_results
+        if not all_results:
+            return 0
+        
+        ai_count = sum(1 for r in all_results if 'AI Generated' in r.get('ai_detection', ''))
+        return ((len(all_results) - ai_count) / len(all_results) * 100)
+    
+    def _calculate_completion_rate(self, technical_results, project_results):
+        """Calculate overall completion rate"""
+        total_questions = len(technical_results) + len(project_results)
+        if total_questions == 0:
+            return 0
+        
+        completed_questions = len(technical_results) + sum(1 for r in project_results if r.get('answer', '').strip().lower() != 'skipped')
+        return (completed_questions / total_questions * 100)
+    
+    def _format_metrics_markdown(self, technical_results, project_results):
+        """Format metrics for markdown display"""
+        metrics = self._calculate_overall_metrics(technical_results, project_results)
+        
+        return f"""
+- **Total Questions Asked:** {metrics['total_questions_across_interviews']}
+- **AI-Generated Responses:** {metrics['total_ai_generated_responses']}
+- **Positive Sentiment Responses:** {metrics['total_positive_responses']}
+- **Overall Authenticity Rate:** {metrics['overall_authenticity_rate']:.1f}%
+- **Overall Positive Response Rate:** {metrics['overall_positive_rate']:.1f}%
+"""
+
+class FeedbackAnalyzer:
+    def __init__(self):
+        self.feedback_dir = "feedback"
+        if not os.path.exists(self.feedback_dir):
+            os.makedirs(self.feedback_dir)
+    
+    def store_feedback(self, candidate_name, feedback_data):
+        """Store candidate feedback"""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        candidate_clean = candidate_name.replace(' ', '_').lower()
+        filename = f"{self.feedback_dir}/feedback_{candidate_clean}_{timestamp}.json"
+        
+        feedback_entry = {
+            'candidate_name': candidate_name,
+            'timestamp': datetime.now().isoformat(),
+            'feedback_data': feedback_data
+        }
+        
+        with open(filename, 'w') as f:
+            json.dump(feedback_entry, f, indent=2)
+        
+        return filename
+    
+    def analyze_feedback_trends(self):
+        """Analyze feedback trends across all candidates"""
+        feedback_files = [f for f in os.listdir(self.feedback_dir) if f.endswith('.json')]
+        
+        if not feedback_files:
+            return "No feedback data available for analysis."
+        
+        all_feedback = []
+        for file in feedback_files:
+            with open(os.path.join(self.feedback_dir, file), 'r') as f:
+                feedback = json.load(f)
+                all_feedback.append(feedback)
+        
+        # Analyze ratings
+        ratings = [f['feedback_data'].get('rating', '') for f in all_feedback]
+        rating_counts = {}
+        for rating in ratings:
+            rating_counts[rating] = rating_counts.get(rating, 0) + 1
+        
+        # Generate summary
+        total_feedback = len(all_feedback)
+        summary = f"""
+Feedback Analysis Summary:
+- Total feedback entries: {total_feedback}
+- Rating distribution: {rating_counts}
+- Most common rating: {max(rating_counts, key=rating_counts.get) if rating_counts else 'N/A'}
+"""
+        
+        return summary
+
+if __name__ == '__main__':
+    # Test the report generator
+    report_gen = ReportGenerator()
+    
+    # Sample data
+    candidate_info = {
+        'name': 'John Doe',
+        'email': 'john.doe@example.com',
+        'experience': '3-5',
+        'position': 'Software Engineer',
+        'tech_stack': 'Python, React, Node.js'
+    }
+    
+    technical_results = [
+        {
+            'question': 'What is the difference between synchronous and asynchronous programming?',
+            'answer': 'Synchronous programming executes code sequentially...',
+            'ai_detection': 'Human Written',
+            'sentiment': 'Positive'
+        }
+    ]
+    
+    project_results = [
+        {
+            'question': 'Tell me about a recent project.',
+            'answer': 'I built an e-commerce platform...',
+            'ai_detection': 'Human Written',
+            'sentiment': 'Positive'
+        }
+    ]
+    
+    assessment_text = "The candidate demonstrates strong technical skills..."
+    
+    # Generate reports
+    json_file, json_data = report_gen.generate_json_report(candidate_info, technical_results, project_results, assessment_text)
+    print(f"JSON report generated: {json_file}")
+    
+    md_file, md_content = report_gen.generate_markdown_report(candidate_info, technical_results, project_results, assessment_text)
+    print(f"Markdown report generated: {md_file}")
+    
+    csv_file, csv_data = report_gen.generate_csv_summary(candidate_info, technical_results, project_results)
+    print(f"CSV summary generated: {csv_file}")
+
