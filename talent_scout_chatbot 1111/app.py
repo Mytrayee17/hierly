@@ -12,7 +12,8 @@ st.set_page_config(
 
 # --- AI Configuration ---
 # It's recommended to use st.secrets for API keys in a deployed app
-genai.configure(api_key="AIzaSyDxYIfsEDSDvqVOLl5Y00bOEPQ9zE73vjE") # type: ignore
+api_key = os.getenv("GEMINI_API_KEY", "AIzaSyDxYIfsEDSDvqVOLl5Y00bOEPQ9zE73vjE")
+genai.configure(api_key=api_key) # type: ignore
 
 # --- Hirely AI Logic ---
 @st.cache_resource
@@ -575,9 +576,9 @@ def show_report():
 show_progress_tracker()
 
 if st.session_state.phase == "welcome":
-    show_welcome_screen()
+        show_welcome_screen()
 elif st.session_state.phase == "info_gathering":
-    show_info_gathering()
+        show_info_gathering()
 elif st.session_state.phase == "technical_qa":
     show_technical_qa()
 elif st.session_state.phase == "project_discussion":
