@@ -5,7 +5,7 @@ import os
 
 # --- Page Configuration ---
 st.set_page_config(
-    page_title="TalentScout AI",
+    page_title="Hirely AI",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -14,17 +14,41 @@ st.set_page_config(
 # It's recommended to use st.secrets for API keys in a deployed app
 genai.configure(api_key="AIzaSyDxYIfsEDSDvqVOLl5Y00bOEPQ9zE73vjE") # type: ignore
 
-# --- TalentScout AI Logic ---
+# --- Hirely AI Logic ---
 @st.cache_resource
 def get_ai_model():
-    return TalentScoutAI()
+    return HirelyAI()
 
-class TalentScoutAI:
+class HirelyAI:
     def __init__(self):
         self.model = genai.GenerativeModel("models/gemini-1.5-flash-latest") # type: ignore
 
     def analyze(self, prompt):
-        return self.model.generate_content(prompt).text.strip() # type: ignore
+        return self.model.generate_content(prompt).text
+
+    def generate_technical_questions(self, tech_stack):
+        prompt = f"""Generate 2-3 technical questions for each technology in this stack: {', '.join(tech_stack)}.
+        Make questions practical and relevant to real-world development.
+        Format as a list of questions."""
+        return self.analyze(prompt)
+
+    def generate_project_questions(self):
+        prompt = """Generate 5 project discussion questions covering:
+        1. Project goals and objectives
+        2. Technologies and tools used
+        3. Innovation and unique features
+        4. Challenges faced and solutions
+        5. Lessons learned and improvements
+        
+        Format as a list of questions."""
+        return self.analyze(prompt)
+
+    def check_correctness(self, question, answer):
+        prompt = f"""Is this answer correct for the question?
+        Question: {question}
+        Answer: {answer}
+        Respond with only: 'Correct' or 'Incorrect'"""
+        return self.analyze(prompt)
 
     def detect_ai_generated_text(self, text):
         prompt = f"""Analyze if this text appears to be AI-generated. Consider:
@@ -44,38 +68,12 @@ Reason: Brief explanation of why you think it's AI-generated or not
         return self.analyze(prompt)
 
     def analyze_sentiment(self, text):
-        prompt = f"Analyze the sentiment of this text. Respond with only: 'Positive', 'Negative', or 'Neutral'.\n\nText: {text}"
+        prompt = f"Analyze the sentiment of this text. Respond with only: 'Positive', 'Negative', or 'Neutral'\n\nText: {text}"
         return self.analyze(prompt)
 
-    def check_correctness(self, question, answer):
-        prompt = f"Evaluate if this answer correctly addresses the technical question. Consider accuracy, completeness, and relevance. Respond with only: 'Correct' or 'Incorrect'.\n\nQuestion: {question}\nAnswer: {answer}"
-        return self.analyze(prompt)
-
-    def generate_tech_questions(self, tech_stack):
-        questions = []
-        for tech in tech_stack:
-            tech_questions = [
-                f"What are the core principles and best practices of {tech}?",
-                f"Describe a challenging problem you solved using {tech}. What was your approach?",
-                f"What are the common pitfalls and how do you avoid them when working with {tech}?"
-            ]
-            questions.extend(tech_questions)
-        return questions
-
-    def generate_project_questions(self):
-        return [
-            "Please describe a significant project you've worked on recently. What was the goal and your role?",
-            "What technologies did you use in this project and why did you choose them?",
-            "What was the most innovative or novel aspect of your approach?",
-            "What were the biggest challenges you faced and how did you overcome them?",
-            "What were the outcomes and what did you learn from this project?"
-        ]
-
-    def generate_final_report(self, candidate_data, technical_answers, project_answers):
+    def generate_final_report(self, candidate_data, history):
         prompt = f"""
         Generate a comprehensive hiring report in Markdown for:
-        
-        **Candidate Information:**
         - **Name:** {candidate_data.get('fullName')}
         - **Email:** {candidate_data.get('email')}
         - **Phone:** {candidate_data.get('phone')}
@@ -83,21 +81,10 @@ Reason: Brief explanation of why you think it's AI-generated or not
         - **Experience:** {candidate_data.get('experience')}
         - **Desired Position(s):** {', '.join(candidate_data.get('positions', []))}
         - **Tech Stack:** {', '.join(candidate_data.get('techStack', []))}
-        
-        **Technical Assessment:**
-        {technical_answers}
-        
-        **Project Discussion:**
-        {project_answers}
-        
-        **Analysis & Recommendation:**
-        Provide a detailed analysis including:
-        1. Technical competency assessment
-        2. Problem-solving ability
-        3. Communication skills
-        4. Overall fit for the role
-        5. Final recommendation: 'Strong Hire', 'Proceed with Caution', or 'Not a Good Fit'
-        6. Specific feedback and areas for improvement
+        **Interview History:**
+        {history}
+        **Summary & Recommendation:**
+        Provide a final summary and a hiring recommendation (e.g., 'Strong Hire', 'Proceed with caution', 'Not a good fit').
         """
         return self.analyze(prompt)
 
@@ -109,27 +96,55 @@ Reason: Brief explanation of why you think it's AI-generated or not
         # Simple heuristic, can be replaced by a more complex check if needed
         return text.strip().endswith('?')
 
-talentscout_ai = get_ai_model()
+    def is_clarification_request(self, text):
+        clarification_phrases = [
+            "i didn't understand", "explain", "repeat", "clarify", 
+            "what do you mean", "can you explain", "i don't get it",
+            "not clear", "confused", "help me understand"
+        ]
+        text_lower = text.lower()
+        return any(phrase in text_lower for phrase in clarification_phrases)
 
-# --- Interview Content ---
-PROJECT_QUESTIONS = [
-    "Please describe a significant project you've worked on recently. What was the goal and your role?",
-    "What technologies did you use in this project and why did you choose them?",
-    "What was the most innovative or novel aspect of your approach?",
-    "What were the biggest challenges you faced and how did you overcome them?",
-    "What were the outcomes and what did you learn from this project?"
-]
+    def re_explain_question(self, question):
+        prompt = f"""Re-explain this technical question in simple, clear terms that a candidate can easily understand:
+
+Question: {question}
+
+Provide a friendly, helpful explanation that breaks down the question."""
+        return self.analyze(prompt)
+
+    def fallback_response(self, context):
+        return (
+            "I'm sorry, I didn't quite understand your response. "
+            "Could you please clarify or answer the question as best you can? "
+            f"Let's stay focused on your {context} experience."
+        )
+
+hirely_ai = get_ai_model()
 
 # --- Session State Initialization ---
 if "phase" not in st.session_state:
     st.session_state.phase = "welcome"
+
+if "candidate_data" not in st.session_state:
     st.session_state.candidate_data = {}
-    st.session_state.chat_history = []
+
+if "technical_questions" not in st.session_state:
     st.session_state.technical_questions = []
+
+if "project_questions" not in st.session_state:
+    st.session_state.project_questions = []
+
+if "technical_answers" not in st.session_state:
     st.session_state.technical_answers = {}
-    st.session_state.project_questions = PROJECT_QUESTIONS
+
+if "project_answers" not in st.session_state:
     st.session_state.project_answers = {}
+
+if "current_tech_q" not in st.session_state:
     st.session_state.current_tech_q = 0
+
+if "current_proj_q" not in st.session_state:
     st.session_state.current_proj_q = 0
 
 if "bot_message" not in st.session_state:
@@ -148,44 +163,52 @@ def show_progress_tracker():
     }
     
     phase_order = list(phases.keys())
-    current_phase_key = st.session_state.phase
-    current_index = phase_order.index(current_phase_key)
-
+    current_index = phase_order.index(st.session_state.phase)
+    
     for i, (phase_key, phase_name) in enumerate(phases.items()):
         if i < current_index:
-            st.sidebar.markdown(f"- ✅ {phase_name}")
+            st.sidebar.success(f"✅ {phase_name}")
         elif i == current_index:
-            st.sidebar.markdown(f"**- ⏳ {phase_name}**")
+            st.sidebar.info(f"🔄 {phase_name}")
         else:
-            st.sidebar.markdown(f"- ⚪ {phase_name}")
+            st.sidebar.text(f"⏳ {phase_name}")
 
 def show_welcome_screen():
-    st.title("TalentScout - Your Virtual Hiring Assistant")
-    st.markdown("Hello! I'm **hierly**, your AI-powered hiring assistant. I'll help you through our comprehensive interview process designed to assess your technical skills and project experience.")
-    st.markdown("---")
-    st.subheader("The process includes:")
+    st.title("🚀 Welcome to Hirely AI")
+    st.markdown("### Your Intelligent Hiring Assistant")
+    
     st.markdown("""
-        - Basic information collection
-        - Technical skill assessment
-        - Project experience discussion
-        - Comprehensive evaluation report
+    **Hirely AI** is your advanced recruitment companion that conducts comprehensive technical interviews 
+    and project assessments to help you find the perfect candidate.
+    
+    ### Our Process:
+    1. **📝 Information Gathering** - Collect essential candidate details
+    2. **🔧 Technical Assessment** - Deep dive into technical skills
+    3. **💼 Project Discussion** - Explore real-world project experience
+    4. **📊 Comprehensive Report** - Get detailed analysis and recommendations
+    
+    ### Features:
+    - 🤖 AI-powered question generation based on tech stack
+    - 📈 Real-time sentiment and AI detection analysis
+    - 🎯 Personalized interview experience
+    - 📋 Detailed assessment reports
     """)
-    if st.button("Start Application", type="primary"):
+    
+    if st.button("Start Interview Process", type="primary", use_container_width=True):
         st.session_state.phase = "info_gathering"
         st.rerun()
 
 def show_info_gathering():
-    st.title("👤 Your Information")
-    st.markdown("Please provide your details below. This will help us tailor the interview.")
-
-    with st.form("info_form"):
+    st.title("📝 Candidate Information")
+    
+    with st.form("candidate_info"):
         col1, col2 = st.columns(2)
         
         with col1:
             full_name = st.text_input("Full Name *")
             email = st.text_input("Email Address *")
             phone = st.text_input("Phone Number *")
-            experience = st.selectbox("Years of Experience *", ["< 1 year", "1-3 years", "3-5 years", "5-10 years", "10+ years"])
+            experience = st.number_input("Years of Experience *", min_value=0, max_value=50, value=2)
         
         with col2:
             positions_list = st.text_input("Desired Position(s) (comma-separated) *", "Software Engineer, Data Scientist")
@@ -197,37 +220,52 @@ def show_info_gathering():
         if submitted:
             tech_stack = [tech.strip() for tech in tech_stack_list.split(',')] if tech_stack_list else []
             positions = [pos.strip() for pos in positions_list.split(',')] if positions_list else []
-            data = {
-                "fullName": full_name,
-                "email": email,
-                "phone": phone,
-                "experience": experience,
-                "positions": positions,
-                "location": location,
-                "techStack": tech_stack,
+            
+            st.session_state.candidate_data = {
+                'fullName': full_name,
+                'email': email,
+                'phone': phone,
+                'experience': experience,
+                'positions': positions,
+                'location': location,
+                'techStack': tech_stack
             }
-
-            if all([full_name, email, phone, experience, positions, location, tech_stack]):
-                st.session_state.candidate_data = data
-                st.session_state.technical_questions = talentscout_ai.generate_tech_questions(tech_stack)
-                st.session_state.phase = "technical_qa"
-                st.rerun()
-            else:
-                st.error("Please fill in all required fields (*).")
+            
+            # Generate questions
+            with st.spinner("Generating technical questions..."):
+                tech_questions_text = hirely_ai.generate_technical_questions(tech_stack)
+                st.session_state.technical_questions = [q.strip() for q in tech_questions_text.split('\n') if q.strip()]
+            
+            with st.spinner("Generating project questions..."):
+                project_questions_text = hirely_ai.generate_project_questions()
+                st.session_state.project_questions = [q.strip() for q in project_questions_text.split('\n') if q.strip()]
+            
+            st.session_state.phase = "technical_qa"
+            st.rerun()
 
 def show_technical_qa():
     st.title("🔧 Tech Stack Deep Dive")
     
-    # Progress meter
+    # Show bot message if exists
+    if st.session_state.bot_message:
+        st.info(f"**Hirely:** {st.session_state.bot_message}")
+        if st.button("Continue", key="continue_bot"):
+            st.session_state.bot_message = None
+            st.rerun()
+        return
+    
+    # Progress
     total_questions = len(st.session_state.technical_questions)
-    progress = st.session_state.current_tech_q / total_questions if total_questions > 0 else 0
-    st.progress(progress, text=f"Question {st.session_state.current_tech_q + 1} of {total_questions}")
+    if total_questions > 0:
+        progress = (st.session_state.current_tech_q / total_questions) * 100
+        st.progress(progress / 100)
+        st.caption(f"Question {st.session_state.current_tech_q + 1} of {total_questions} ({progress:.1f}%)")
     
     col1, col2 = st.columns([2, 1])
     
-        with col1:
+    with col1:
         st.subheader("Technical Questions")
-        
+
         # Show analysis of the previous question
         if st.session_state.current_tech_q > 0:
             last_answer_data = st.session_state.technical_answers.get(st.session_state.current_tech_q - 1)
@@ -249,53 +287,50 @@ def show_technical_qa():
                     st.write(f"• **Confidence:** {ai_confidence}")
                     st.write(f"• **Reason:** {ai_reason}")
                 else:
-                    st.warning(f"**Analysis:** That doesn't seem quite right. No worries, let's keep going!")
-
+                    st.warning(f"**Analysis:** That might not be quite right. Keep trying!")
+                
                 st.info(f"**Sentiment:** Your response was {sentiment.lower()}.")
-                
-                # Show AI detection info even if not flagged
-                if ai_detected.lower() == 'no':
-                    st.success(f"**AI Detection:** Your answer appears to be original and authentic.")
-                    if ai_confidence != 'N/A':
-                        st.write(f"• **Confidence:** {ai_confidence}")
-                
-                st.markdown("---")
 
-        # Display any message from the bot (e.g., answer to user's question)
-        if st.session_state.bot_message:
-            st.info(st.session_state.bot_message)
-            st.session_state.bot_message = None
-
+        # Current question
         if st.session_state.current_tech_q < len(st.session_state.technical_questions):
             current_q = st.session_state.technical_questions[st.session_state.current_tech_q]
+            st.markdown(f"**Question {st.session_state.current_tech_q + 1}:** {current_q}")
             
-            st.markdown(f"**Question {st.session_state.current_tech_q + 1}:**")
-            st.write(current_q)
+            col_input, col_btn1, col_btn2 = st.columns([3, 1, 1])
             
-            # Answer input
-            answer = st.text_area("Your Answer:", key=f"tech_ans_{st.session_state.current_tech_q}", 
-                                placeholder="Type your answer here...", height=150)
+            with col_input:
+                answer = st.text_area("Your Answer", key=f"tech_answer_{st.session_state.current_tech_q}", 
+                                    placeholder="Type your answer here...", height=100)
             
-            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
             with col_btn1:
-                if st.button("🎤 Voice", key=f"voice_{st.session_state.current_tech_q}"):
+                if st.button("🎤", key=f"voice_{st.session_state.current_tech_q}", help="Voice Input (Coming Soon)"):
                     st.info("Voice input feature coming soon!")
             
             with col_btn2:
                 if st.button("Send", key=f"send_{st.session_state.current_tech_q}", type="primary"):
                     if answer.strip():
-                        if talentscout_ai.is_user_input_a_question(answer):
+                        if hirely_ai.is_user_input_a_question(answer):
                             with st.spinner("Thinking..."):
-                                st.session_state.bot_message = talentscout_ai.answer_user_question(answer)
+                                bot_reply = hirely_ai.answer_user_question(answer)
+                                # Fallback if bot reply is empty or off-topic
+                                if not bot_reply or any(x in bot_reply.lower() for x in ["not sure", "don't know", "uncertain", "no idea"]):
+                                    st.session_state.bot_message = hirely_ai.fallback_response("technical")
+                                else:
+                                    st.session_state.bot_message = bot_reply
                             st.rerun()
-                        elif answer.lower().strip() in ["ok", "okay", "got it", "continue", "next"]:
+                        elif hirely_ai.is_clarification_request(answer):
+                            with st.spinner("Re-explaining..."):
+                                re_explanation = hirely_ai.re_explain_question(current_q)
+                                st.session_state.bot_message = f"Let me clarify: {re_explanation}"
+                            st.rerun()
+                        elif answer.lower() in ['ok', 'continue', 'next', 'yes', 'got it']:
                             st.session_state.current_tech_q += 1
-                st.rerun()
-    else:
+                            st.rerun()
+                        else:
                             # Analyze answer
                             with st.spinner("Analyzing your answer..."):
-                                ai_detected_result = talentscout_ai.detect_ai_generated_text(answer)
-                                correctness_result = talentscout_ai.check_correctness(current_q, answer)
+                                ai_detected_result = hirely_ai.detect_ai_generated_text(answer)
+                                correctness_result = hirely_ai.check_correctness(current_q, answer)
 
                                 # Parse AI detection result
                                 ai_generated = "No"
@@ -312,74 +347,85 @@ def show_technical_qa():
                                         elif line.startswith("Reason:"):
                                             reason = line.split(":")[1].strip()
 
-                                # If AI-generated, mark as incorrect
+                                # Set correctness based on AI detection
                                 if ai_generated.lower() == 'yes':
-                                    correctness_result = 'Incorrect'
+                                    correctness_result = "Incorrect"
                                 
-                                analysis = {
-                                    'sentiment': talentscout_ai.analyze_sentiment(answer),
-                                    'ai_detected': ai_generated,
-                                    'ai_confidence': confidence,
-                                    'ai_reason': reason,
-                                    'correctness': correctness_result
+                                sentiment_result = hirely_ai.analyze_sentiment(answer)
+                                
+                                st.session_state.technical_answers[st.session_state.current_tech_q] = {
+                                    'question': current_q,
+                                    'answer': answer,
+                                    'analysis': {
+                                        'correctness': correctness_result,
+                                        'sentiment': sentiment_result,
+                                        'ai_detected': ai_generated,
+                                        'ai_confidence': confidence,
+                                        'ai_reason': reason
+                                    }
                                 }
-                            
-                            st.session_state.technical_answers[st.session_state.current_tech_q] = {
-                                'question': current_q,
-                                'answer': answer,
-                                'analysis': analysis
-                            }
-                            
-                            st.session_state.current_tech_q += 1
-                            st.rerun()
+                                
+                                st.session_state.current_tech_q += 1
+                                st.rerun()
                     else:
                         st.error("Please provide an answer before proceeding.")
         else:
-            st.success("Technical Q&A completed! Moving to project discussion...")
-            if st.button("Continue to Projects", type="primary"):
+            st.success("🎉 Technical assessment completed!")
+            if st.button("Continue to Project Discussion", type="primary"):
                 st.session_state.phase = "project_discussion"
                 st.rerun()
     
     with col2:
         st.subheader("Candidate Summary")
-        
         data = st.session_state.candidate_data
+        
         st.write(f"**Name:** {data.get('fullName', 'N/A')}")
         st.write(f"**Email:** {data.get('email', 'N/A')}")
-        st.write(f"**Experience:** {data.get('experience', 'N/A')}")
+        st.write(f"**Experience:** {data.get('experience', 'N/A')} years")
         
-        st.write("**Tech Stack:**")
+        st.markdown("**Tech Stack:**")
         for tech in data.get('techStack', []):
-            st.markdown(f"`{tech}`")
+            st.markdown(f"🔹 {tech}")
         
         # Scorecard
         if st.session_state.technical_answers:
-            st.subheader("Scorecard")
             correct_answers = sum(1 for ans in st.session_state.technical_answers.values() 
                                 if ans['analysis']['correctness'].lower() == 'correct')
             total_answered = len(st.session_state.technical_answers)
-            score = (correct_answers / total_answered * 100) if total_answered > 0 else 0
+            score = (correct_answers / total_answered) * 100 if total_answered > 0 else 0
             
+            st.markdown("---")
+            st.subheader("Scorecard")
             st.metric("Correct Answers", f"{correct_answers}/{total_answered}")
-            st.metric("Accuracy", f"{score:.1f}%")
+            st.metric("Score", f"{score:.1f}%")
 
 def show_project_discussion():
-    st.title("📋 Project Discussion")
+    st.title("💼 Project Discussion")
     
-    # Progress meter
+    # Show bot message if exists
+    if st.session_state.bot_message:
+        st.info(f"**Hirely:** {st.session_state.bot_message}")
+        if st.button("Continue", key="continue_bot_proj"):
+            st.session_state.bot_message = None
+            st.rerun()
+        return
+    
+    # Progress
     total_questions = len(st.session_state.project_questions)
-    progress = st.session_state.current_proj_q / total_questions if total_questions > 0 else 0
-    st.progress(progress, text=f"Question {st.session_state.current_proj_q + 1} of {total_questions}")
+    if total_questions > 0:
+        progress = (st.session_state.current_proj_q / total_questions) * 100
+        st.progress(progress / 100)
+        st.caption(f"Question {st.session_state.current_proj_q + 1} of {total_questions} ({progress:.1f}%)")
     
     col1, col2 = st.columns([2, 1])
     
-        with col1:
+    with col1:
         st.subheader("Project Questions")
-        
+
         # Show analysis of the previous question
         if st.session_state.current_proj_q > 0:
             last_answer_data = st.session_state.project_answers.get(st.session_state.current_proj_q - 1)
-            if last_answer_data and 'analysis' in last_answer_data:
+            if last_answer_data:
                 st.markdown("---")
                 st.subheader("Feedback on Your Last Answer")
                 analysis = last_answer_data['analysis']
@@ -395,140 +441,143 @@ def show_project_discussion():
                     st.warning(f"**AI Detection Details:**")
                     st.write(f"• **Confidence:** {ai_confidence}")
                     st.write(f"• **Reason:** {ai_reason}")
-                else:
-                    st.success(f"**AI Detection:** Your answer appears to be original and authentic.")
-                    if ai_confidence != 'N/A':
-                        st.write(f"• **Confidence:** {ai_confidence}")
-                
-                st.markdown("---")
 
+        # Current question
         if st.session_state.current_proj_q < len(st.session_state.project_questions):
             current_q = st.session_state.project_questions[st.session_state.current_proj_q]
+            st.markdown(f"**Question {st.session_state.current_proj_q + 1}:** {current_q}")
             
-            st.markdown(f"**Question {st.session_state.current_proj_q + 1}:**")
-            st.write(current_q)
+            col_input, col_btn1, col_btn2 = st.columns([3, 1, 1])
             
-            # Answer input
-            answer = st.text_area("Your Answer:", key=f"proj_ans_{st.session_state.current_proj_q}", 
-                                placeholder="Type your answer here...", height=150)
+            with col_input:
+                answer = st.text_area("Your Answer", key=f"proj_answer_{st.session_state.current_proj_q}", 
+                                    placeholder="Type your answer here...", height=100)
             
-            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
             with col_btn1:
-                if st.button("🎤 Voice", key=f"proj_voice_{st.session_state.current_proj_q}"):
+                if st.button("🎤", key=f"voice_proj_{st.session_state.current_proj_q}", help="Voice Input (Coming Soon)"):
                     st.info("Voice input feature coming soon!")
             
             with col_btn2:
-                if st.button("Send", key=f"proj_send_{st.session_state.current_proj_q}", type="primary"):
+                if st.button("Send", key=f"send_proj_{st.session_state.current_proj_q}", type="primary"):
                     if answer.strip():
-                        with st.spinner("Analyzing your answer..."):
-                            ai_detected_result = talentscout_ai.detect_ai_generated_text(answer)
-                            
-                            # Parse AI detection result
-                            ai_generated = "No"
-                            confidence = "Low"
-                            reason = "Analysis not available"
-                            
-                            if "AI-Generated:" in ai_detected_result:
-                                lines = ai_detected_result.split('\n')
-                                for line in lines:
-                                    if line.startswith("AI-Generated:"):
-                                        ai_generated = line.split(":")[1].strip()
-                                    elif line.startswith("Confidence:"):
-                                        confidence = line.split(":")[1].strip()
-                                    elif line.startswith("Reason:"):
-                                        reason = line.split(":")[1].strip()
-                            
-                            analysis = {
-                                'sentiment': talentscout_ai.analyze_sentiment(answer),
-                                'ai_detected': ai_generated,
-                                'ai_confidence': confidence,
-                                'ai_reason': reason,
-                            }
-                        st.session_state.project_answers[st.session_state.current_proj_q] = {
-                            'question': current_q,
-                            'answer': answer,
-                            'analysis': analysis
-                        }
-                        
-                        st.session_state.current_proj_q += 1
-                        st.rerun()
+                        if hirely_ai.is_user_input_a_question(answer):
+                            with st.spinner("Thinking..."):
+                                bot_reply = hirely_ai.answer_user_question(answer)
+                                # Fallback if bot reply is empty or off-topic
+                                if not bot_reply or any(x in bot_reply.lower() for x in ["not sure", "don't know", "uncertain", "no idea"]):
+                                    st.session_state.bot_message = hirely_ai.fallback_response("project")
+                                else:
+                                    st.session_state.bot_message = bot_reply
+                            st.rerun()
+                        elif hirely_ai.is_clarification_request(answer):
+                            with st.spinner("Re-explaining..."):
+                                re_explanation = hirely_ai.re_explain_question(current_q)
+                                st.session_state.bot_message = f"Let me clarify: {re_explanation}"
+                            st.rerun()
+                        elif answer.lower() in ['ok', 'continue', 'next', 'yes', 'got it']:
+                            st.session_state.current_proj_q += 1
+                            st.rerun()
+                        else:
+                            with st.spinner("Analyzing your answer..."):
+                                ai_detected_result = hirely_ai.detect_ai_generated_text(answer)
+                                
+                                # Parse AI detection result
+                                ai_generated = "No"
+                                confidence = "Low"
+                                reason = "Analysis not available"
+                                
+                                if "AI-Generated:" in ai_detected_result:
+                                    lines = ai_detected_result.split('\n')
+                                    for line in lines:
+                                        if line.startswith("AI-Generated:"):
+                                            ai_generated = line.split(":")[1].strip()
+                                        elif line.startswith("Confidence:"):
+                                            confidence = line.split(":")[1].strip()
+                                        elif line.startswith("Reason:"):
+                                            reason = line.split(":")[1].strip()
+                                
+                                sentiment_result = hirely_ai.analyze_sentiment(answer)
+                                
+                                st.session_state.project_answers[st.session_state.current_proj_q] = {
+                                    'question': current_q,
+                                    'answer': answer,
+                                    'analysis': {
+                                        'sentiment': sentiment_result,
+                                        'ai_detected': ai_generated,
+                                        'ai_confidence': confidence,
+                                        'ai_reason': reason
+                                    }
+                                }
+                                
+                                st.session_state.current_proj_q += 1
+                                st.rerun()
                     else:
                         st.error("Please provide an answer before proceeding.")
         else:
-            st.success("Project discussion completed! Generating your report...")
-            if st.button("View Report", type="primary"):
+            st.success("🎉 Project discussion completed!")
+            if st.button("Generate Report", type="primary"):
                 st.session_state.phase = "report"
                 st.rerun()
     
     with col2:
         st.subheader("Candidate Summary")
-        
         data = st.session_state.candidate_data
+        
         st.write(f"**Name:** {data.get('fullName', 'N/A')}")
         st.write(f"**Email:** {data.get('email', 'N/A')}")
-        st.write(f"**Experience:** {data.get('experience', 'N/A')}")
+        st.write(f"**Experience:** {data.get('experience', 'N/A')} years")
         
-        st.write("**Tech Stack:**")
+        st.markdown("**Tech Stack:**")
         for tech in data.get('techStack', []):
-            st.markdown(f"`{tech}`")
-        
-        # Technical Scorecard
-        if st.session_state.technical_answers:
-            st.subheader("Technical Scorecard")
-            correct_answers = sum(1 for ans in st.session_state.technical_answers.values() 
-                                if ans['analysis']['correctness'].lower() == 'correct')
-            total_answered = len(st.session_state.technical_answers)
-            score = (correct_answers / total_answered * 100) if total_answered > 0 else 0
-            
-            st.metric("Correct Answers", f"{correct_answers}/{total_answered}")
-            st.metric("Accuracy", f"{score:.1f}%")
+            st.markdown(f"🔹 {tech}")
 
 def show_report():
-    st.title("📊 Interview Report")
+    st.title("📊 Assessment Report")
     
-    # Generate comprehensive report
-    with st.spinner("Generating your comprehensive report..."):
-        technical_summary = "\n".join([
-            f"**Q{idx+1}:** {ans['question']}\n**A:** {ans['answer']}\n**Analysis:** Correctness: {ans['analysis'].get('correctness', 'N/A')}, Sentiment: {ans['analysis'].get('sentiment', 'N/A')}, AI-Generated: {ans['analysis'].get('ai_detected', 'N/A')}\n"
-            for idx, ans in st.session_state.technical_answers.items()
-        ])
+    # Generate report
+    with st.spinner("Generating comprehensive report..."):
+        # Prepare history
+        history = "## Technical Assessment\n"
+        for q_num, answer_data in st.session_state.technical_answers.items():
+            history += f"**Q{q_num + 1}:** {answer_data['question']}\n"
+            history += f"**Answer:** {answer_data['answer']}\n"
+            analysis = answer_data['analysis']
+            history += f"**Analysis:** Correctness: {analysis['correctness']}, Sentiment: {analysis['sentiment']}, AI-Detected: {analysis['ai_detected']}\n\n"
         
-        project_summary = "\n".join([
-            f"**Q{idx+1}:** {ans['question']}\n**A:** {ans['answer']}\n**Analysis:** Sentiment: {ans.get('analysis', {}).get('sentiment', 'N/A')}, AI-Generated: {ans.get('analysis', {}).get('ai_detected', 'N/A')}\n"
-            for idx, ans in st.session_state.project_answers.items()
-        ])
+        history += "## Project Discussion\n"
+        for q_num, answer_data in st.session_state.project_answers.items():
+            history += f"**Q{q_num + 1}:** {answer_data['question']}\n"
+            history += f"**Answer:** {answer_data['answer']}\n"
+            analysis = answer_data['analysis']
+            history += f"**Analysis:** Sentiment: {analysis['sentiment']}, AI-Detected: {analysis['ai_detected']}\n\n"
         
-        report = talentscout_ai.generate_final_report(
-            st.session_state.candidate_data,
-            technical_summary,
-            project_summary
-        )
+        report = hirely_ai.generate_final_report(st.session_state.candidate_data, history)
     
     # Display report
     st.markdown(report)
     
-    # Candidate feedback section
-    st.subheader("📝 Interview Feedback")
-    st.write("We'd love to hear your thoughts about this interview experience!")
+    # Download options
+    col1, col2 = st.columns(2)
     
-    feedback = st.text_area("Your Feedback:", placeholder="Please share your experience, suggestions, or any comments...", height=100)
+    with col1:
+        if st.button("📄 Download as Markdown", type="primary"):
+            # Save report logic here
+            st.success("Report saved as markdown!")
     
-    if st.button("Submit Feedback", type="primary"):
-        if feedback.strip():
-            st.success("Thank you for your feedback! A recruiter will be in touch soon.")
-        else:
-            st.info("Thank you for completing the interview! A recruiter will be in touch soon.")
-    
-    if st.button("Start New Interview"):
-        st.session_state.clear()
-        st.rerun()
+    with col2:
+        if st.button("🔄 Start New Interview", type="secondary"):
+            # Reset session state
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
 
-# --- Main App Router ---
+# --- Main App Logic ---
 show_progress_tracker()
+
 if st.session_state.phase == "welcome":
-        show_welcome_screen()
+    show_welcome_screen()
 elif st.session_state.phase == "info_gathering":
-        show_info_gathering()
+    show_info_gathering()
 elif st.session_state.phase == "technical_qa":
     show_technical_qa()
 elif st.session_state.phase == "project_discussion":
